@@ -1,38 +1,47 @@
-import { FastMCP } from "fastmcp";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import cors from 'cors'
+import express from "express";
 import pmxt from "pmxtjs";
 import { z } from "zod";
 import { envConfig } from "./lib/env";
 
 const poly = new pmxt.Polymarket();
 const kalshi = new pmxt.Kalshi();
-const server = new FastMCP({
+const server = new McpServer({
 	name: "Prediction Markets MCP",
 	version: "1.0.0",
 });
-server.addTool({
-	name: "getMarkets",
-	description: "Get the list of markets from Polymarket or Kalshi",
-	parameters: z.object({
-		limit: z
-			.number()
-			.optional()
-			.default(10)
-			.describe("Number of markets to fetch"),
-		offset: z
-			.number()
-			.optional()
-			.default(0)
-			.describe("Number of markets to skip"),
-		source: z
-			.enum(["polymarket", "kalshi", "all"])
-			.optional()
-			.default("all")
-			.describe("Source of the markets"),
-	}),
-	execute: async (args) => {
+server.registerTool(
+	"getMarkets",
+	{
+		description: "Get the list of markets from Polymarket or Kalshi",
+		inputSchema: z.object({
+			limit: z
+				.number()
+				.optional()
+				.default(10)
+				.describe("Number of markets to fetch"),
+			offset: z
+				.number()
+				.optional()
+				.default(0)
+				.describe("Number of markets to skip"),
+			source: z
+				.enum(["polymarket", "kalshi", "all"])
+				.optional()
+				.default("all")
+				.describe("Source of the markets"),
+		}),
+	},
+	async (args) => {
 		if (args.source === "all") {
 			const groupOfMarkets = await Promise.all([
-				poly.fetchMarkets({ limit: args.limit, offset: args.offset, searchIn: "both" }),
+				poly.fetchMarkets({
+					limit: args.limit,
+					offset: args.offset,
+					searchIn: "both",
+				}),
 				kalshi.fetchMarkets({
 					limit: args.limit,
 					offset: args.offset,
@@ -49,13 +58,20 @@ server.addTool({
 					? new Date(market.resolutionDate)
 					: undefined,
 			}));
-			return JSON.stringify(formattedData);
+			return {
+				content: [
+					{
+						type: "text",
+						text: JSON.stringify(formattedData),
+					},
+				],
+			};
 		} else {
 			const markets =
 				args.source === "polymarket"
 					? await poly.fetchMarkets({
 							limit: args.limit,
-							offset: args.offset, 
+							offset: args.offset,
 							searchIn: "both",
 						})
 					: await kalshi.fetchMarkets({
@@ -73,32 +89,41 @@ server.addTool({
 					? new Date(market.resolutionDate)
 					: undefined,
 			}));
-			return JSON.stringify(formattedData);
+			return {
+				content: [
+					{
+						type: "text",
+						text: JSON.stringify(formattedData),
+					},
+				],
+			};
 		}
 	},
-});
-server.addTool({
-	name: "searchMarkets",
-	description: "Search for markets from Polymarket or Kalshi",
-	parameters: z.object({
-		query: z.string().describe("Query to search for"),
-		limit: z
-			.number()
-			.optional()
-			.default(10)
-			.describe("Number of markets to fetch"),
-		offset: z
-			.number()
-			.optional()
-			.default(0)
-			.describe("Number of markets to skip"),
-		source: z
-			.enum(["polymarket", "kalshi", "all"])
-			.optional()
-			.default("all")
-			.describe("Source of the markets"),
-	}),
-	execute: async (args) => {
+);
+server.registerTool(
+	"searchMarkets",
+	{
+		description: "Search for markets from Polymarket or Kalshi",
+		inputSchema: z.object({
+			query: z.string().describe("Query to search for"),
+			limit: z
+				.number()
+				.optional()
+				.default(10)
+				.describe("Number of markets to fetch"),
+			offset: z
+				.number()
+				.optional()
+				.default(0)
+				.describe("Number of markets to skip"),
+			source: z
+				.enum(["polymarket", "kalshi", "all"])
+				.optional()
+				.default("all")
+				.describe("Source of the markets"),
+		}),
+	},
+	async (args) => {
 		if (args.source === "all") {
 			const groupOfMarkets = await Promise.all([
 				poly.searchMarkets(args.query, {
@@ -121,7 +146,14 @@ server.addTool({
 					? new Date(market.resolutionDate)
 					: undefined,
 			}));
-			return JSON.stringify(formattedData);
+			return {
+				content: [
+					{
+						type: "text",
+						text: JSON.stringify(formattedData),
+					},
+				],
+			};
 		} else {
 			const markets =
 				args.source === "polymarket"
@@ -143,16 +175,34 @@ server.addTool({
 					? new Date(market.resolutionDate)
 					: undefined,
 			}));
-			return JSON.stringify(formattedData);
+			return {
+				content: [
+					{
+						type: "text",
+						text: JSON.stringify(formattedData),
+					},
+				],
+			};
 		}
 	},
+);
+
+const expressApp = express();
+expressApp.use(cors());
+expressApp.use(express.json());
+expressApp.post("/mcp", async (req, res) => {
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+  res.on("close", () => transport.close());
+  await server.connect(transport);
+  await transport.handleRequest(req, res, req.body);
 });
-server.start({
-	transportType: "httpStream",
-	httpStream: {
-		port: envConfig.PORT,
-		stateless: true,
-		host: "0.0.0.0",
-		enableJsonResponse: true,
-	},
+expressApp.listen(envConfig.PORT, (err) => {
+  if (err) {
+    console.error("Error starting server:", err);
+    process.exit(1);
+  }
+  console.log(`Server listening on http://localhost:${envConfig.PORT}/mcp`);
 });
