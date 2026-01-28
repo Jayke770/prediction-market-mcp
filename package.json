@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src",
+    "start": "bun run src",
     "lint": "biome lint --write .",
     "format": "biome format --write ."
   },
