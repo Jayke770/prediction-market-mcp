@@ -152,6 +152,7 @@ server.start({
 	httpStream: {
 		port: envConfig.PORT,
 		stateless: true,
+		host: "0.0.0.0",
 		enableJsonResponse: true,
 	},
 });
