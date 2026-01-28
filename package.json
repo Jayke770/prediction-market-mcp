@@ -1,5 +1,5 @@
 {
-  "name": "predictall-mcp",
+  "name": "prediction-markets-mcp",
   "module": "index.ts",
   "type": "module",
   "private": true,

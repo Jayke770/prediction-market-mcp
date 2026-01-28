@@ -6,7 +6,7 @@ import { envConfig } from "./lib/env";
 const poly = new pmxt.Polymarket();
 const kalshi = new pmxt.Kalshi();
 const server = new FastMCP({
-	name: "PredictAll MCP",
+	name: "Prediction Markets MCP",
 	version: "1.0.0",
 });
 server.addTool({
